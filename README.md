@@ -1,22 +1,25 @@
-# PHP 8.1 Windows build with CVE-2026-109618 / CVE-2026-109619 backport
+# PHP 8.1.34 for Windows with CVE-2026-109618 / CVE-2026-109619 fix
 
-PHP 8.1 is EOL, so php.net ships only a source backport (branch `PHP-8.1-CVE-2026-109618-109619`, commit `1d7dec1`), no Windows binaries. This workflow builds them with the official `php/php-windows-builder` (VS2019 / vs16, PGO, same config as windows.php.net).
+Unofficial build. PHP 8.1 is EOL, so php.net published only a source backport (branch `PHP-8.1-CVE-2026-109618-109619`, php-src commit `1d7dec1`) and no Windows binaries. These are built from that exact commit with the official `php/php-windows-builder` (VS2019 / vs16, PGO, same configure flags as windows.php.net).
 
-## Build
+## Which file
 
-1. Create a GitHub repo and push this folder to it (keep the `.github/workflows/build.yml` path).
-2. `gh workflow run php-8.1-cve-windows` (or Actions tab > php-8.1-cve-windows > Run workflow).
-3. `gh run download` once the run finishes (about 30-60 min).
+| File | Use |
+|---|---|
+| `php-8.1.34-nts-Win32-vs16-x64.zip` | IIS, FastCGI, CLI |
+| `php-8.1.34-Win32-vs16-x64.zip` | Apache mod_php (thread-safe) |
+| `*-x86.zip` | Same, 32-bit |
+| `php-debug-pack-*` | PDB debug symbols |
+| `php-devel-pack-*` | SDK for building extensions |
 
-## Output
+Needs the VC++ 2015-2022 Redistributable.
 
-Four artifacts (nts-x64, ts-x64, nts-x86, ts-x86), each with:
+## Notes
 
-- `php-8.1.34[-nts]-Win32-vs16-{x64,x86}.zip`
-- debug pack, devel pack, test pack
+- The build still reports `PHP 8.1.34`, same as the unpatched official build. Use the SHA-256 shown next to each file on the release page to tell them apart.
+- Existing 8.1 vs16 extension DLLs should still load: the patch adds functions but changes no public struct layout.
+- PHP 8.1 gets no further fixes. Upgrade to a supported version (8.2+) when you can.
 
-Use NTS for IIS/FastCGI/CLI, TS for Apache mod_php. Needs the VC++ 2015-2022 Redistributable.
+## Rebuild
 
-## Note
-
-The patched build still reports `PHP 8.1.34`, same as the unpatched official build. Tell them apart by zip SHA-256 or build date. Existing 8.1 vs16 extension DLLs should still load: the patch adds functions but changes no public struct layout.
+Actions > php-8.1-cve-windows > Run workflow. It builds all 4 variants from the pinned commit, checks each binary contains the fix, and publishes the release.
