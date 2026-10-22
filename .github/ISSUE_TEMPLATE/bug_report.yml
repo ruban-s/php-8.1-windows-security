@@ -1,0 +1,39 @@
+name: Bug report
+description: A problem running these PHP 8.1 Windows builds
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: For security problems use private vulnerability reporting (Security tab) instead of a public issue.
+  - type: dropdown
+    id: package
+    attributes:
+      label: Package
+      options:
+        - x64 Non Thread Safe
+        - x64 Thread Safe
+        - x86 Non Thread Safe
+        - x86 Thread Safe
+    validations:
+      required: true
+  - type: input
+    id: server
+    attributes:
+      label: Server / stack
+      placeholder: IIS 10 FastCGI, Apache 2.4 mod_php, XAMPP, Laragon, CLI...
+    validations:
+      required: true
+  - type: textarea
+    id: version
+    attributes:
+      label: Output of `php -v`
+      render: text
+    validations:
+      required: true
+  - type: textarea
+    id: problem
+    attributes:
+      label: What happened
+      description: Steps to reproduce, the error message, and whether the official PHP 8.1.34 build behaves the same.
+    validations:
+      required: true

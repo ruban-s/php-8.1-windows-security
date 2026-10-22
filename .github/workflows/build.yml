@@ -1,6 +1,11 @@
-name: php-8.1-cve-windows
+name: Build PHP 8.1 for Windows
 
 on: workflow_dispatch
+
+env:
+  PHP_SRC_COMMIT: 1d7dec178a094e6e75b229ce22754045f8c6070a
+  VERSION_SUFFIX: -pl1-cve2026
+  RELEASE_TAG: php-8.1.34-cve-2026-109618-109619
 
 jobs:
   build:
@@ -11,11 +16,20 @@ jobs:
         ts: [nts, ts]
     runs-on: windows-2022
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
         with:
           repository: php/php-src
           # PHP-8.1-CVE-2026-109618-109619 head (8.1.34 + backport for CVE-2026-109618/109619)
-          ref: 1d7dec178a094e6e75b229ce22754045f8c6070a
+          ref: ${{ env.PHP_SRC_COMMIT }}
+
+      - name: Mark version as patched
+        shell: bash
+        run: |
+          sed -i "s/\[8\.1\.34\]/[8.1.34${VERSION_SUFFIX}]/" configure.ac
+          sed -i "s/PHP_EXTRA_VERSION \"\"/PHP_EXTRA_VERSION \"${VERSION_SUFFIX}\"/; s/PHP_VERSION \"8\.1\.34\"/PHP_VERSION \"8.1.34${VERSION_SUFFIX}\"/" main/php_version.h
+          grep -qF "[8.1.34${VERSION_SUFFIX}]" configure.ac
+          grep -qF "PHP_EXTRA_VERSION \"${VERSION_SUFFIX}\"" main/php_version.h
+          grep -qF "PHP_VERSION \"8.1.34${VERSION_SUFFIX}\"" main/php_version.h
 
       - uses: php/php-windows-builder/php@v1
         with:
@@ -27,24 +41,45 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+      id-token: write
+      attestations: write
+      artifact-metadata: write
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
 
-      - uses: actions/download-artifact@v5
+      - uses: actions/download-artifact@v8
         with:
           path: artifacts
           merge-multiple: true
 
-      - name: Verify CVE fix is in every binary
+      - name: Verify CVE fix and version in every binary
         run: |
-          for z in artifacts/php-8.1.34-*.zip; do
-            unzip -p "$z" 'php8*.dll' | grep -q zend_mm_safe_error_ex || { echo "::error::patch missing in $z"; exit 1; }
+          shopt -s nullglob
+          zips=(artifacts/php-8.1.34${VERSION_SUFFIX}-*.zip)
+          [ ${#zips[@]} -eq 4 ] || { echo "::error::expected 4 binary zips, found ${#zips[@]}"; exit 1; }
+          for z in "${zips[@]}"; do
+            unzip -p "$z" 'php8*.dll' > /tmp/php.dll
+            grep -q zend_mm_safe_error_ex /tmp/php.dll || { echo "::error::patch missing in $z"; exit 1; }
+            grep -qF "8.1.34${VERSION_SUFFIX}" /tmp/php.dll || { echo "::error::version string missing in $z"; exit 1; }
+            echo "$z: $(unzip -Z1 "$z" | grep -cE '^ext/php_.*\.dll$') extensions, $(unzip -Z1 "$z" | grep -E '^(php|php-cgi)\.exe$|apache2_4\.dll$' | tr '\n' ' ')"
           done
+
+      - name: Checksums
+        working-directory: artifacts
+        run: sha256sum php* > SHA256SUMS && cat SHA256SUMS
+
+      - uses: actions/attest@v4
+        with:
+          subject-checksums: artifacts/SHA256SUMS
 
       - name: Publish release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create php-8.1.34-cve-2026-109618-109619 artifacts/php* \
-            --title "PHP 8.1.34 Windows (CVE-2026-109618 / CVE-2026-109619 fix)" \
-            --notes-file README.md
+          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            gh release delete "$RELEASE_TAG" --cleanup-tag --yes
+          fi
+          gh release create "$RELEASE_TAG" artifacts/php* artifacts/SHA256SUMS \
+            --title "PHP 8.1.34 for Windows - CVE-2026-109618 & CVE-2026-109619 security fix (x64/x86, NTS/TS)" \
+            --notes-file .github/release-notes.md \
+            --latest
